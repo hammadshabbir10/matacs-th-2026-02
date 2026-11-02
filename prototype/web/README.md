@@ -1,6 +1,7 @@
 # Web console
 
 A Next.js front end for the same pipeline as the Python prototype.
+Live: [proposal-triage.vercel.app](https://proposal-triage.vercel.app).
 
 - **Saved run (no key needed).** Proposals A–E as read live by Gemini 3.6 Flash. Every quote was
   verified at run time; the quotes and the proposal text are withheld here because the brief must

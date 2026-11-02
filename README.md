@@ -4,6 +4,7 @@
 |---|---|
 | **Name** | Hammad Shabbir |
 | **Reference** | MATACS-TH-2026-02 |
+| **Live demo** | [proposal-triage.vercel.app](https://proposal-triage.vercel.app): open the console; the saved run needs no key |
 | **Time actually spent** | About 2 hours for the required design (diagram, write-up, prompt, ranking), plus about 2 hours on the optional prototype and web app. All on 2 November 2026. |
 
 **The idea: AI reads, rules decide, a person approves.** The AI turns each proposal into facts, each
@@ -61,6 +62,10 @@ every figure in the ranking.
 
 ## Run the web app (optional)
 
-Deploy `prototype/web` on Vercel (Root Directory: `prototype/web`). Add `GEMINI_API_KEY` and,
+**Live:** [proposal-triage.vercel.app](https://proposal-triage.vercel.app). The **saved run** shows proposals A–E as read by
+Gemini 3.6 Flash, with no key needed. The **live run** reads new proposals with Gemini, and Groq
+if Gemini is busy.
+
+To deploy your own copy, deploy `prototype/web` on Vercel (Root Directory: `prototype/web`). Add `GEMINI_API_KEY` and,
 optionally, `GROQ_API_KEY` as environment variables for the live run. Without keys, the saved run
 still shows the full result. Details: [`prototype/web/README.md`](prototype/web/README.md).
