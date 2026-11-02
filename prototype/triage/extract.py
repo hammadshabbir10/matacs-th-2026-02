@@ -1,6 +1,7 @@
 """Extraction (the only AI step) and the code checks that run on its output.
 
-- `extract_live` calls Claude once per proposal with structured outputs.
+- `extract_live` calls the model once per proposal with a fixed JSON schema. Two providers are
+  supported (Claude and Gemini); the checks and the scoring are the same for both.
 - `scan_for_instructions` is a plain-code second check for text aimed at automated reviewers.
 - `verify` checks every quote really appears in the document and every number appears in its
   quote; anything that fails is downgraded to "unclear" so a person looks at it.
@@ -9,11 +10,13 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 
 from .prompt import PROMPT_VERSION, SYSTEM_PROMPT, build_output_schema, build_user_message
 
-MODEL = "claude-opus-5-5"
+CLAUDE_MODEL = "claude-opus-5-5"
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 # Phrases that address an automated reviewer rather than the client. Deliberately broad: a
 # false positive costs one human glance, a miss lets a bid steer its own score.
@@ -26,27 +29,59 @@ INSTRUCTION_PATTERNS = [
 ]
 
 
-def extract_live(criteria: dict, proposal_id: str, text: str, today: str) -> dict:
-    """One Claude call per proposal. Requires ANTHROPIC_API_KEY (see .env.example)."""
-    import anthropic  # imported here so offline replay needs no SDK or key
+def extract_live(criteria: dict, proposal_id: str, text: str, today: str, provider: str = "claude") -> dict:
+    """One model call per proposal. A refusal, a cut-off or an unparseable answer is never guessed
+    around: it comes back as an error and the proposal goes to a person."""
+    user = build_user_message(criteria, proposal_id, text, today)
+    schema = build_output_schema(criteria)
+    payload = _gemini(user, schema) if provider == "gemini" else _claude(user, schema)
+    payload["prompt_version"] = PROMPT_VERSION
+    return payload
 
-    client = anthropic.Anthropic()
-    response = client.messages.create(
-        model=MODEL,
+
+def _claude(user: str, schema: dict) -> dict:
+    """Needs ANTHROPIC_API_KEY. Imported lazily so offline replay needs no SDK or key."""
+    import anthropic
+
+    response = anthropic.Anthropic().messages.create(
+        model=CLAUDE_MODEL,
         max_tokens=4000,
         system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": build_user_message(criteria, proposal_id, text, today)}],
-        output_config={
-            "effort": "medium",
-            "format": {"type": "json_schema", "schema": build_output_schema(criteria)},
-        },
+        messages=[{"role": "user", "content": user}],
+        output_config={"effort": "medium", "format": {"type": "json_schema", "schema": schema}},
     )
     if response.stop_reason != "end_turn":
-        # A refusal or a truncated answer is never guessed around: the proposal goes to a person.
         return {"error": f"extraction stopped: {response.stop_reason}", "model": response.model}
     payload = json.loads(next(b.text for b in response.content if b.type == "text"))
     payload["model"] = response.model
-    payload["prompt_version"] = PROMPT_VERSION
+    return payload
+
+
+def _gemini(user: str, schema: dict) -> dict:
+    """Needs GEMINI_API_KEY (free key from Google AI Studio)."""
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=user,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            response_mime_type="application/json",
+            response_json_schema=schema,
+            temperature=0,  # Gemini accepts these; they reduce run-to-run variation
+            seed=7,
+        ),
+    )
+    finish = response.candidates[0].finish_reason.name if response.candidates else "NO_CANDIDATE"
+    if finish != "STOP" or not response.text:
+        return {"error": f"extraction stopped: {finish}", "model": GEMINI_MODEL}
+    try:
+        payload = json.loads(response.text)
+    except json.JSONDecodeError:
+        return {"error": "extraction returned invalid JSON", "model": GEMINI_MODEL}
+    payload["model"] = getattr(response, "model_version", None) or GEMINI_MODEL
     return payload
 
 

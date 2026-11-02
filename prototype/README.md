@@ -22,8 +22,9 @@ python -m pytest -q                                   # tests, offline
 # The brief's sample proposals are not in this repo. Save each one as A.txt ... E.txt in a folder.
 python -m triage.run --print-prompt                   # the exact prompt and schema
 python -m triage.run --samples ../samples --live      # needs ANTHROPIC_API_KEY (see ../.env.example)
+python -m triage.run --samples ../samples --live --provider gemini   # free GEMINI_API_KEY instead
 python -m triage.run --samples ../samples --replay ../extractions   # score saved extraction files
 ```
 
-`--live` calls Claude once per proposal and saves nothing to disk except the audit record. `--replay`
+`--live` calls the model (Claude by default, or Gemini with `--provider gemini`) once per proposal; keys are read from `../.env`, which git ignores. It saves nothing to disk except the audit record. `--replay`
 scores extraction files saved earlier, which is also how a result is reproduced exactly later.

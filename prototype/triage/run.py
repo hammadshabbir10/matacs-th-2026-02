@@ -1,6 +1,7 @@
 """Run the triage on a folder of proposal texts.
 
   python -m triage.run --samples ../samples --live           # extract with Claude, then score
+  python -m triage.run --samples ../samples --live --provider gemini   # free Gemini key
   python -m triage.run --samples ../samples --replay ../ext  # score saved extraction files
   python -m triage.run --print-prompt                        # show the exact prompt and schema
 
@@ -14,14 +15,24 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 from pathlib import Path
 
-from .extract import MODEL, extract_live, verify
+from .extract import CLAUDE_MODEL, GEMINI_MODEL, extract_live, verify
 from .prompt import PROMPT_VERSION, SYSTEM_PROMPT, build_output_schema, build_user_message
 from .score import rank, validate_criteria
 
 HERE = Path(__file__).resolve().parent.parent
 DEFAULT_CRITERIA = HERE / "criteria" / "commercial-solar-installation.v1.json"
+
+
+def load_dotenv(path: Path) -> None:
+    """Read KEY=value lines from the repo's .env (never committed) without overriding the shell."""
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            key, sep, value = line.strip().partition("=")
+            if sep and key and not key.startswith("#") and value:
+                os.environ.setdefault(key.strip(), value.strip())
 
 
 def main() -> None:
@@ -31,12 +42,15 @@ def main() -> None:
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--live", action="store_true", help="call Claude for extraction (needs ANTHROPIC_API_KEY)")
     mode.add_argument("--replay", type=Path, help="folder of saved extraction JSON files (A.json ...)")
+    ap.add_argument("--provider", choices=["claude", "gemini"], default="claude")
+    ap.add_argument("--save-extractions", type=Path, help="with --live: save each extraction (keep outside git)")
     ap.add_argument("--out", type=Path, default=Path("ranking.json"))
     ap.add_argument("--audit", type=Path, default=Path("audit"))
     ap.add_argument("--today", default=dt.date.today().isoformat())
     ap.add_argument("--print-prompt", action="store_true")
     args = ap.parse_args()
 
+    load_dotenv(HERE.parent / ".env")
     criteria = json.loads(args.criteria.read_text(encoding="utf-8"))
     validate_criteria(criteria)
 
@@ -52,7 +66,10 @@ def main() -> None:
     verified, audit_inputs = {}, {}
     for pid, text in texts.items():
         if args.live:
-            extraction = extract_live(criteria, pid, text, args.today)
+            extraction = extract_live(criteria, pid, text, args.today, args.provider)
+            if args.save_extractions:
+                args.save_extractions.mkdir(parents=True, exist_ok=True)
+                (args.save_extractions / f"{pid}.json").write_text(json.dumps(extraction, indent=2), encoding="utf-8")
         else:
             extraction = json.loads((args.replay / f"{pid}.json").read_text(encoding="utf-8"))
         if "error" in extraction:
@@ -76,8 +93,8 @@ def main() -> None:
         "run_id": run_id,
         "criteria": {"category": criteria["category"], "version": criteria["version"]},
         "prompt_version": PROMPT_VERSION,
-        "extraction_mode": "live" if args.live else f"replay:{args.replay}",
-        "model": MODEL if args.live else None,
+        "extraction_mode": f"live:{args.provider}" if args.live else f"replay:{args.replay}",
+        "model": (GEMINI_MODEL if args.provider == "gemini" else CLAUDE_MODEL) if args.live else None,
         "proposals": audit_inputs,
         "scoring": detail,
         "result": rows,
