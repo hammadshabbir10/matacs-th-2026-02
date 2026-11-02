@@ -1,7 +1,8 @@
 """Extraction (the only AI step) and the code checks that run on its output.
 
 - `extract_live` calls the model once per proposal with a fixed JSON schema. Two providers are
-  supported (Claude and Gemini); the checks and the scoring are the same for both.
+  supported (Claude, Gemini, Groq), with an optional fallback provider; the checks and the
+  scoring are the same whichever model read the proposal.
 - `scan_for_instructions` is a plain-code second check for text aimed at automated reviewers.
 - `verify` checks every quote really appears in the document and every number appears in its
   quote; anything that fails is downgraded to "unclear" so a person looks at it.
@@ -12,11 +13,14 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 
 from .prompt import PROMPT_VERSION, SYSTEM_PROMPT, build_output_schema, build_user_message
 
 CLAUDE_MODEL = "claude-opus-5-5"
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+MODELS = {"claude": CLAUDE_MODEL, "gemini": GEMINI_MODEL, "groq": GROQ_MODEL}
 
 # Phrases that address an automated reviewer rather than the client. Deliberately broad: a
 # false positive costs one human glance, a miss lets a bid steer its own score.
@@ -29,14 +33,37 @@ INSTRUCTION_PATTERNS = [
 ]
 
 
-def extract_live(criteria: dict, proposal_id: str, text: str, today: str, provider: str = "claude") -> dict:
-    """One model call per proposal. A refusal, a cut-off or an unparseable answer is never guessed
+def extract_live(criteria: dict, proposal_id: str, text: str, today: str,
+                 provider: str = "claude", fallback: str | None = None) -> dict:
+    """One model call per proposal: the main provider (with retries), then the fallback provider
+    if the main one is down. A refusal, a cut-off or an unparseable answer is never guessed
     around: it comes back as an error and the proposal goes to a person."""
     user = build_user_message(criteria, proposal_id, text, today)
     schema = build_output_schema(criteria)
-    payload = _gemini(user, schema) if provider == "gemini" else _claude(user, schema)
+    attempts = []
+    for name in [provider] + ([fallback] if fallback and fallback != provider else []):
+        payload = _with_retries(_PROVIDERS[name], user, schema, MODELS[name])
+        attempts.append({"provider": name, "model": payload.get("model"), "error": payload.get("error")})
+        if "error" not in payload:
+            break
+    payload["provider"] = attempts[-1]["provider"]
+    payload["fallback_used"] = len(attempts) > 1 and "error" not in payload
+    payload["attempts"] = attempts
     payload["prompt_version"] = PROMPT_VERSION
     return payload
+
+
+def _with_retries(call, user: str, schema: dict, model: str) -> dict:
+    for attempt in range(4):
+        try:
+            return call(user, schema)
+        except Exception as exc:  # each SDK raises its own types; the HTTP status decides
+            status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+            if status in (429, 500, 502, 503, 529) and attempt < 3:
+                time.sleep(2 ** (attempt + 1))  # 2, 4, 8 seconds
+                continue
+            return {"error": f"extraction failed: {type(exc).__name__} {status or ''}".strip(), "model": model}
+    return {"error": "extraction failed", "model": model}
 
 
 def _claude(user: str, schema: dict) -> dict:
@@ -83,6 +110,32 @@ def _gemini(user: str, schema: dict) -> dict:
         return {"error": "extraction returned invalid JSON", "model": GEMINI_MODEL}
     payload["model"] = getattr(response, "model_version", None) or GEMINI_MODEL
     return payload
+
+
+def _groq(user: str, schema: dict) -> dict:
+    """Needs GROQ_API_KEY (free key from console.groq.com)."""
+    from groq import Groq
+
+    response = Groq(api_key=os.environ.get("GROQ_API_KEY")).chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}],
+        response_format={"type": "json_schema",
+                         "json_schema": {"name": "proposal_facts", "schema": schema, "strict": True}},
+        temperature=0,
+        seed=7,
+    )
+    choice = response.choices[0]
+    if choice.finish_reason != "stop" or not choice.message.content:
+        return {"error": f"extraction stopped: {choice.finish_reason}", "model": GROQ_MODEL}
+    try:
+        payload = json.loads(choice.message.content)
+    except json.JSONDecodeError:
+        return {"error": "extraction returned invalid JSON", "model": GROQ_MODEL}
+    payload["model"] = response.model
+    return payload
+
+
+_PROVIDERS = {"claude": _claude, "gemini": _gemini, "groq": _groq}
 
 
 def _normalise(s: str) -> str:

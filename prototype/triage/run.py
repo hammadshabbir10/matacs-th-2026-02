@@ -1,7 +1,7 @@
 """Run the triage on a folder of proposal texts.
 
   python -m triage.run --samples ../samples --live           # extract with Claude, then score
-  python -m triage.run --samples ../samples --live --provider gemini   # free Gemini key
+  python -m triage.run --samples ../samples --live --provider gemini --fallback groq   # free keys
   python -m triage.run --samples ../samples --replay ../ext  # score saved extraction files
   python -m triage.run --print-prompt                        # show the exact prompt and schema
 
@@ -18,7 +18,7 @@ import json
 import os
 from pathlib import Path
 
-from .extract import CLAUDE_MODEL, GEMINI_MODEL, extract_live, verify
+from .extract import MODELS, extract_live, verify
 from .prompt import PROMPT_VERSION, SYSTEM_PROMPT, build_output_schema, build_user_message
 from .score import rank, validate_criteria
 
@@ -42,7 +42,8 @@ def main() -> None:
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--live", action="store_true", help="call Claude for extraction (needs ANTHROPIC_API_KEY)")
     mode.add_argument("--replay", type=Path, help="folder of saved extraction JSON files (A.json ...)")
-    ap.add_argument("--provider", choices=["claude", "gemini"], default="claude")
+    ap.add_argument("--provider", choices=["claude", "gemini", "groq"], default="claude")
+    ap.add_argument("--fallback", choices=["claude", "gemini", "groq"], help="provider to use if the main one fails")
     ap.add_argument("--save-extractions", type=Path, help="with --live: save each extraction (keep outside git)")
     ap.add_argument("--out", type=Path, default=Path("ranking.json"))
     ap.add_argument("--audit", type=Path, default=Path("audit"))
@@ -66,7 +67,7 @@ def main() -> None:
     verified, audit_inputs = {}, {}
     for pid, text in texts.items():
         if args.live:
-            extraction = extract_live(criteria, pid, text, args.today, args.provider)
+            extraction = extract_live(criteria, pid, text, args.today, args.provider, args.fallback)
             if args.save_extractions:
                 args.save_extractions.mkdir(parents=True, exist_ok=True)
                 (args.save_extractions / f"{pid}.json").write_text(json.dumps(extraction, indent=2), encoding="utf-8")
@@ -94,7 +95,8 @@ def main() -> None:
         "criteria": {"category": criteria["category"], "version": criteria["version"]},
         "prompt_version": PROMPT_VERSION,
         "extraction_mode": f"live:{args.provider}" if args.live else f"replay:{args.replay}",
-        "model": (GEMINI_MODEL if args.provider == "gemini" else CLAUDE_MODEL) if args.live else None,
+        "model": MODELS[args.provider] if args.live else None,
+        "fallback": args.fallback if args.live else None,
         "proposals": audit_inputs,
         "scoring": detail,
         "result": rows,
