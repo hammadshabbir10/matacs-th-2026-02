@@ -70,14 +70,33 @@ export function scanForInstructions(text: string): string[] {
     .filter((s) => s && INSTRUCTION_PATTERNS.some((p) => p.test(s)));
 }
 
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+/** A value no real proposal could mean: the wrong type, not finite, negative, or a zero price. */
+export function impossibleValue(type: FieldType, value: Value, mustBePositive: boolean): string | null {
+  if (type === "boolean") return typeof value === "boolean" ? null : `value ${JSON.stringify(value)} is not yes/no`;
+  if (type === "integer" || type === "number") {
+    if (!isNum(value)) return `value ${JSON.stringify(value)} is not a number`;
+    if (value < 0) return `value ${g(value)} is negative`;
+    if (mustBePositive && value === 0) return "value is 0, which cannot be right for this field";
+  }
+  return null;
+}
+
 export function verify(criteria: Criteria, extraction: Extraction, text: string): Verified {
   const problems: string[] = [];
   const facts: Facts = {};
+  // Fields scored "lower is better" (price, timeline) divide by the value, so they must be above 0.
+  const positive = new Set(criteria.weighted.filter((w) => w.method === "ratio_to_lowest").flatMap((w) => w.fields));
   for (const f of criteria.fields) {
     const fact: Fact = { ...(extraction.facts?.[f.id] ?? { value: null, status: "not_stated", quote: null, note: null }) };
     if (!["stated", "not_stated", "unclear"].includes(fact.status)) { fact.status = "unclear"; problems.push(`${f.id}: invalid status`); }
     if (fact.status !== "not_stated" && fact.value !== null && fact.value !== undefined) {
-      if (!quoteFound(fact.quote, text)) { problems.push(`${f.id}: quote not found in the document`); fact.status = "unclear"; }
+      const problem = impossibleValue(f.type, fact.value, positive.has(f.id));
+      if (problem) {
+        problems.push(`${f.id}: ${problem}`); fact.status = "unclear";
+        if (!isNum(fact.value)) fact.value = null; // nothing usable to score; the reviewer sees the problem
+      } else if (!quoteFound(fact.quote, text)) { problems.push(`${f.id}: quote not found in the document`); fact.status = "unclear"; }
       else if ((f.type === "integer" || f.type === "number") && !numberInQuote(Number(fact.value), fact.quote!)) {
         problems.push(`${f.id}: number ${fact.value} does not appear in its quote`); fact.status = "unclear";
       }
@@ -115,12 +134,21 @@ const g = (x: number) => (Number.isInteger(x) ? String(x) : String(parseFloat(x.
 const pyNum = (x: number) => (Number.isInteger(x) ? x.toFixed(1) : String(x)); // str(float) as in f"{score}"
 
 export function validateCriteria(c: Criteria): void {
+  for (const w of c.weighted) {
+    if (!isNum(w.weight) || w.weight < 0) throw new Error(`criterion '${w.id}' has an invalid weight ${w.weight}`);
+    if (!["ratio_to_best", "ratio_to_lowest", "checklist"].includes(w.method)) throw new Error(`criterion '${w.id}' has an unknown method ${w.method}`);
+    if (w.limit !== undefined && !(isNum(w.limit) && w.limit > 0)) throw new Error(`criterion '${w.id}' has a limit of ${w.limit}, which must be above 0`);
+  }
   const total = c.weighted.reduce((s, w) => s + w.weight, 0);
   if (total !== 100) throw new Error(`weighted criteria must add up to 100, got ${total}`);
-  const known = new Set(c.fields.map((f) => f.id));
+  const types = Object.fromEntries(c.fields.map((f) => [f.id, f.type]));
+  const gates = new Set<object>(c.mandatory);
   for (const item of [...c.mandatory, ...c.weighted]) {
-    const missing = item.fields.filter((f) => !known.has(f));
+    const missing = item.fields.filter((f) => !(f in types));
     if (missing.length) throw new Error(`criterion '${item.id}' uses unknown fields ${missing.join(", ")}`);
+    const wanted = gates.has(item) || (item as Weighted).method === "checklist" ? ["boolean"] : ["integer", "number"];
+    const wrong = item.fields.filter((f) => !wanted.includes(types[f]));
+    if (wrong.length) throw new Error(`criterion '${item.id}' needs ${wanted.join(" or ")} fields, not ${wrong.join(", ")}`);
   }
 }
 
@@ -147,21 +175,25 @@ function criterionInput(c: Weighted, facts: Facts): number | null {
   return vals.some((v) => v === null) ? null : vals.reduce<number>((s, v) => s + Number(v), 0);
 }
 
+/** Negative values never score; "lower is better" values must be above 0 (they are divided by). */
+const valid = (w: Weighted, v: number) => (w.method === "ratio_to_lowest" ? v > 0 : v >= 0);
+
 export function scorePool(c: Criteria, pool: Record<string, Facts>) {
   const results: Record<string, { points: Record<string, number>; inputs: Record<string, number | null>; warnings: string[]; score: number }> = {};
   for (const pid of Object.keys(pool)) results[pid] = { points: {}, inputs: {}, warnings: [], score: 0 };
   for (const w of c.weighted) {
     const inputs: Record<string, number | null> = {};
     for (const [pid, facts] of Object.entries(pool)) inputs[pid] = criterionInput(w, facts);
-    const ok = Object.values(inputs).filter((v): v is number => v !== null && (w.limit === undefined || v <= w.limit));
+    const ok = Object.values(inputs).filter((v): v is number => v !== null && valid(w, v) && (w.limit === undefined || v <= w.limit));
     for (const [pid, v] of Object.entries(inputs)) {
       results[pid].inputs[w.id] = v;
       let share: number;
       if (w.method === "checklist") share = (v as number) / w.fields.length;
       else if (v === null) { share = 0; results[pid].warnings.push(`${w.label.toLowerCase()} not stated (0 points)`); }
+      else if (!valid(w, v)) { share = 0; results[pid].warnings.push(`${w.label.toLowerCase()} ${g(v)} is not a valid value (0 points)`); }
       else if (w.limit !== undefined && v > w.limit) {
         share = 0; results[pid].warnings.push(`${w.label.toLowerCase()} ${g(v)} exceeds the limit of ${g(w.limit)}`);
-      } else if (w.method === "ratio_to_best") share = v / Math.max(...ok);
+      } else if (w.method === "ratio_to_best") { const best = Math.max(...ok); share = best > 0 ? v / best : 0; } // everyone at 0: no one earns these points
       else share = Math.min(...ok) / v;
       results[pid].points[w.id] = pyRound(share * w.weight, 2);
     }

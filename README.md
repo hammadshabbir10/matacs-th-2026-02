@@ -18,7 +18,7 @@ reviewer resolves anything flagged, and a person makes the award.
 | [`WRITEUP.md`](WRITEUP.md) | Answers to the five questions, and how the sample set comes out |
 | [`PROMPTS.md`](PROMPTS.md) | The extraction prompt and output schema, exactly as sent |
 | [`ranking.json`](ranking.json) | The ranking of proposals A–E |
-| [`prototype/`](prototype/) | Optional: a Python script that runs the prompt, checks the output and scores it, with 13 tests ([how to run](prototype/README.md)) |
+| [`prototype/`](prototype/) | Optional: a Python script that runs the prompt, checks the output and scores it, with 23 tests ([how to run](prototype/README.md)) |
 | [`prototype/web/`](prototype/web/) | Optional: a web console for the same pipeline, with a saved run (no key needed) and a live run ([details](prototype/web/README.md)) |
 | [`.env.example`](.env.example) | The settings for live AI calls. No keys are committed. |
 
@@ -54,6 +54,10 @@ every figure in the ranking.
   falls back to Groq, and only then hands the proposal to a person. Testing that fallback showed why
   the checks matter: the weaker model read B's licence as "not stated" instead of "held by a
   subcontractor", and the design flagged B for a person instead of passing it.
+- **Impossible inputs.** I asked whether values such as a negative price were handled. They were
+  not: a zero price would have crashed the scoring, and a negative one would have scored. The code
+  now flags any negative, zero or non-numeric value for a person, refuses criteria with negative
+  weights or limits, and stops a reviewer entering a negative override. 10 tests cover these cases.
 
 ## Run the web app (optional)
 

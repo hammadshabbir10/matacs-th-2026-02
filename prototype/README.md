@@ -10,7 +10,7 @@ with the admin's criteria and writes `ranking.json` plus an audit record.
 | [`triage/extract.py`](triage/extract.py) | The one Claude call per proposal, plus the code checks on its output: quotes must appear in the document, numbers must appear in their quote, and a scan for text aimed at automated reviewers. |
 | [`triage/score.py`](triage/score.py) | Gates, weighted scoring, ranking, tie-break and the reason lines. Pure code. |
 | [`triage/run.py`](triage/run.py) | Command line: runs everything and writes the ranking and the audit log. |
-| [`tests/test_triage.py`](tests/test_triage.py) | 13 tests on invented proposals (no API key needed). |
+| [`tests/test_triage.py`](tests/test_triage.py) | 23 tests on invented proposals, including impossible values such as a negative price (no API key needed). |
 
 ## Run
 

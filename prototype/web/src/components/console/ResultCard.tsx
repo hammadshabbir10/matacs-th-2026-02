@@ -133,15 +133,17 @@ function FactRow({ label, type, fact, quotesAvailable, overridden, onOverride }:
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
   if (!fact) return null;
   const shown = fact.value === null ? "—" : typeof fact.value === "boolean" ? (fact.value ? "yes" : "no") : typeof fact.value === "number" ? fact.value.toLocaleString("en-US") : String(fact.value);
   const statusCls = fact.status === "stated" ? "text-brand-700" : fact.status === "unclear" ? "text-amber-700" : "text-stone-400";
 
   const save = () => {
-    const v: Value = value === "" ? null : type === "boolean" ? value === "yes" : Number(value);
-    if (type !== "boolean" && v !== null && Number.isNaN(v)) return;
+    const v: Value = value.trim() === "" ? null : type === "boolean" ? value === "yes" : Number(value.replace(/[$,\s]/g, ""));
+    if (typeof v === "number" && !Number.isFinite(v)) return setError("Enter a number, for example 240000.");
+    if (typeof v === "number" && v < 0) return setError("The value can't be negative.");
     onOverride(v, v === null ? "not_stated" : "stated", reason.trim());
-    setEditing(false); setValue(""); setReason("");
+    setEditing(false); setValue(""); setReason(""); setError("");
   };
 
   return (
@@ -160,12 +162,13 @@ function FactRow({ label, type, fact, quotesAvailable, overridden, onOverride }:
                 <option value="">not stated</option><option value="yes">yes</option><option value="no">no</option>
               </select>
             ) : (
-              <input className="input py-1 text-xs" placeholder="new value (blank = not stated)" value={value} onChange={(e) => setValue(e.target.value)} />
+              <input className="input py-1 text-xs" placeholder="new value (blank = not stated)" value={value} onChange={(e) => { setValue(e.target.value); setError(""); }} inputMode="decimal" />
             )}
+            {error && <p className="text-[11px] font-medium text-rose-600">{error}</p>}
             <input className="input py-1 text-xs" placeholder="Reason (required, logged)" value={reason} onChange={(e) => setReason(e.target.value)} />
             <div className="flex gap-1.5">
               <button type="button" className="btn-primary px-2.5 py-1 text-[11px]" disabled={!reason.trim()} onClick={save}>Save override</button>
-              <button type="button" className="btn-ghost px-2.5 py-1 text-[11px]" onClick={() => setEditing(false)}>Cancel</button>
+              <button type="button" className="btn-ghost px-2.5 py-1 text-[11px]" onClick={() => { setEditing(false); setError(""); }}>Cancel</button>
             </div>
           </div>
         )}

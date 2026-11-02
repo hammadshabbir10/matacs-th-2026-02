@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
@@ -164,11 +165,27 @@ def scan_for_instructions(text: str) -> list[str]:
     return hits
 
 
+def impossible_value(value_type: str, value, must_be_positive: bool) -> str | None:
+    """A value no real proposal could mean: the wrong type, not finite, negative, or a zero price."""
+    if value_type == "boolean":
+        return None if isinstance(value, bool) else f"value {value!r} is not yes/no"
+    if value_type in ("integer", "number"):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return f"value {value!r} is not a number"
+        if value < 0:
+            return f"value {value:g} is negative"
+        if must_be_positive and value == 0:
+            return "value is 0, which cannot be right for this field"
+    return None
+
+
 def verify(criteria: dict, extraction: dict, text: str) -> dict:
     """Return verified facts plus a list of problems. Never raises on bad model output."""
     problems: list[str] = []
     facts: dict[str, dict] = {}
     types = {f["id"]: f["type"] for f in criteria["fields"]}
+    # Fields scored "lower is better" (price, timeline) divide by the value, so they must be above 0.
+    positive = {f for c in criteria["weighted"] if c["method"] == "ratio_to_lowest" for f in c["fields"]}
     raw = extraction.get("facts") or {}
 
     for field_id, value_type in types.items():
@@ -177,7 +194,13 @@ def verify(criteria: dict, extraction: dict, text: str) -> dict:
             fact["status"] = "unclear"
             problems.append(f"{field_id}: invalid status")
         if fact["status"] != "not_stated" and fact.get("value") is not None:
-            if not quote_found(fact.get("quote"), text):
+            problem = impossible_value(value_type, fact["value"], field_id in positive)
+            if problem:
+                problems.append(f"{field_id}: {problem}")
+                fact["status"] = "unclear"
+                if not isinstance(fact["value"], (int, float)) or isinstance(fact["value"], bool):
+                    fact["value"] = None  # nothing usable to score; the reviewer sees the problem
+            elif not quote_found(fact.get("quote"), text):
                 problems.append(f"{field_id}: quote not found in the document")
                 fact["status"] = "unclear"
             elif value_type in ("integer", "number") and not number_in_quote(float(fact["value"]), fact["quote"]):

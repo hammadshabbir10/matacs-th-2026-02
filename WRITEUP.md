@@ -29,8 +29,7 @@ fragile for keyword rules.
 Everything that changes an outcome is plain code: text extraction, checking each quote and number
 against the document, the scan for planted instructions, the mandatory checks, the scoring maths,
 the tie-break, the ranking and the reason lines. These must be exact, repeatable, cheap and
-auditable, and they apply policy the admin wrote down, which should be enforced literally, not
-interpreted.
+auditable: they enforce the admin's written policy literally, not by interpretation.
 
 The line: **AI answers "what does this document say?"; code answers "what does that mean for the
 score?"** Even the reasons are built from the scores, so a reason can never contradict its score.
@@ -41,8 +40,8 @@ score?"** Even the reasons are built from the scores, so a reason can never cont
   prototype's tests check this.
 - **Extraction is done once and saved**, keyed by file fingerprint, prompt version and model, with
   a fixed JSON format. Ranking the same proposals twice reuses the saved facts, so the result is
-  identical. (Current Claude models don't accept a "temperature" setting, so saving the answer, not
-  tuning randomness, is what guarantees repeatability.) A new model or prompt is a new version, and
+  identical. (Saving the answer, not tuning randomness, is what guarantees
+  repeatability.) A new model or prompt is a new version, and
   its differences are shown before anything changes.
 - **Every point is traceable.** For each bid the reviewer sees points per criterion, the figure
   behind each, and the quote it came from. The ranking line says it in one sentence, for example
@@ -84,7 +83,7 @@ Every ranking states which criteria version produced it.
 
 | Risk | Safeguard |
 |---|---|
-| Wrong extraction | Every value needs a quote. Code confirms the quote is in the document and the number is in the quote; failures go to the reviewer, who sees the quotes. |
+| Wrong extraction | Every value needs a quote. Code confirms the quote is in the document and the number is in the quote; impossible values (negative or zero price, text for a number) are flagged. Failures go to the reviewer, who sees the quotes. |
 | Made-up facts | No verified quote means "not stated" (0 points). The AI never writes scores or reasons. |
 | Manipulation (as in C) | Proposal text is treated as data; the AI must report, not obey, instructions in it; a separate keyword scan double-checks; the bid is held for a person. Hidden text (white font, metadata) is extracted and flagged. |
 | Bias | The AI doesn't score. Bidder name, size and location don't enter scoring. Mandatory checks run before price, so a cheap but ineligible bid (B) can't anchor the ranking. |

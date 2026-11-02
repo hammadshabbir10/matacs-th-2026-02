@@ -10,14 +10,25 @@ def _num(fact: dict):
 
 def validate_criteria(criteria: dict) -> None:
     """Refuse a criteria set an admin could not have meant: bad weights or unknown fields."""
+    for c in criteria["weighted"]:
+        if not isinstance(c["weight"], (int, float)) or c["weight"] < 0:
+            raise ValueError(f"criterion '{c['id']}' has an invalid weight {c['weight']!r}")
+        if c["method"] not in ("ratio_to_best", "ratio_to_lowest", "checklist"):
+            raise ValueError(f"criterion '{c['id']}' has an unknown method {c['method']!r}")
+        if c.get("limit") is not None and c["limit"] <= 0:
+            raise ValueError(f"criterion '{c['id']}' has a limit of {c['limit']}, which must be above 0")
     total = sum(c["weight"] for c in criteria["weighted"])
     if total != 100:
         raise ValueError(f"weighted criteria must add up to 100, got {total}")
-    known = {f["id"] for f in criteria["fields"]}
+    types = {f["id"]: f["type"] for f in criteria["fields"]}
     for c in criteria["mandatory"] + criteria["weighted"]:
-        missing = [f for f in c["fields"] if f not in known]
+        missing = [f for f in c["fields"] if f not in types]
         if missing:
             raise ValueError(f"criterion '{c['id']}' uses unknown fields {missing}")
+        wanted = ("boolean",) if c in criteria["mandatory"] or c["method"] == "checklist" else ("integer", "number")
+        wrong = [f for f in c["fields"] if types[f] not in wanted]
+        if wrong:
+            raise ValueError(f"criterion '{c['id']}' needs {' or '.join(wanted)} fields, not {wrong}")
 
 
 def check_gates(criteria: dict, facts: dict) -> tuple[str, list[str]]:
@@ -42,13 +53,19 @@ def _criterion_input(criterion: dict, facts: dict):
     return None if any(v is None for v in values) else sum(values)
 
 
+def _valid(criterion: dict, v) -> bool:
+    """Negative values never score; "lower is better" values must be above 0 (they are divided by)."""
+    return v > 0 if criterion["method"] == "ratio_to_lowest" else v >= 0
+
+
 def score_pool(criteria: dict, pool: dict[str, dict]) -> dict[str, dict]:
     """Score every gate-passing proposal. Ratios are taken against the best in the pool."""
     results = {pid: {"points": {}, "inputs": {}, "warnings": []} for pid in pool}
     for c in criteria["weighted"]:
         inputs = {pid: _criterion_input(c, facts) for pid, facts in pool.items()}
         limit = c.get("limit")
-        usable = {pid: v for pid, v in inputs.items() if v is not None and (limit is None or v <= limit)}
+        usable = {pid: v for pid, v in inputs.items()
+                  if v is not None and _valid(c, v) and (limit is None or v <= limit)}
         for pid, v in inputs.items():
             results[pid]["inputs"][c["id"]] = v
             if c["method"] == "checklist":
@@ -56,11 +73,15 @@ def score_pool(criteria: dict, pool: dict[str, dict]) -> dict[str, dict]:
             elif v is None:
                 share = 0.0
                 results[pid]["warnings"].append(f"{c['label'].lower()} not stated (0 points)")
+            elif not _valid(c, v):
+                share = 0.0
+                results[pid]["warnings"].append(f"{c['label'].lower()} {v:g} is not a valid value (0 points)")
             elif limit is not None and v > limit:
                 share = 0.0
                 results[pid]["warnings"].append(f"{c['label'].lower()} {v:g} exceeds the limit of {limit:g}")
             elif c["method"] == "ratio_to_best":
-                share = v / max(usable.values())
+                best = max(usable.values())
+                share = v / best if best > 0 else 0.0  # everyone at 0: no one earns these points
             else:  # ratio_to_lowest
                 share = min(usable.values()) / v
             results[pid]["points"][c["id"]] = round(share * c["weight"], 2)

@@ -118,6 +118,49 @@ def test_price_over_the_ceiling_gets_no_price_points():
     assert any("exceeds the limit" in w for w in detail["X"]["warnings"])
 
 
+
+@pytest.mark.parametrize("value, expected", [
+    (-240000, "is negative"),
+    (0, "value is 0"),
+    ("TBD", "not a number"),
+    (float("nan"), "not a number"),
+])
+def test_impossible_price_is_flagged_and_never_crashes(value, expected):
+    ext = good_extraction(price_cad=fact(value, "Our price is $240,000 CAD"))
+    rows, detail = run({"X": (ext, GOOD_TEXT), "Y": (good_extraction(), GOOD_TEXT)})
+    assert rows["X"]["status"] == "flagged" and expected in rows["X"]["reason"]
+    assert detail["X"]["points"]["price"] == 0
+    assert rows["Y"]["rank"] == 1  # one bad bid never skews the others' scores
+
+
+def test_reviewer_override_to_a_negative_value_scores_nothing():
+    verified = {pid: verify(CRITERIA, good_extraction(), GOOD_TEXT) for pid in "XY"}
+    verified["X"]["facts"]["completion_weeks"] = fact(-4, None)  # as a reviewer override would set it
+    rows, detail = rank(CRITERIA, verified)
+    assert detail["X"]["points"]["timeline"] == 0
+    assert detail["Y"]["points"]["timeline"] == 15
+    assert any("not a valid value" in w for w in detail["X"]["warnings"])
+
+
+def test_no_bidder_with_experience_scores_zero_without_crashing():
+    zero = fact(0, "completed 0 commercial installations")
+    text = GOOD_TEXT.replace("completed 10", "completed 0")
+    _, detail = run({"X": (good_extraction(qualifying_installs=zero), text)})
+    assert detail["X"]["points"]["experience"] == 0
+
+
+@pytest.mark.parametrize("change, expected", [
+    (lambda c: c["weighted"][0].update(weight=-10), "invalid weight"),
+    (lambda c: c["weighted"][1].update(limit=0), "must be above 0"),
+    (lambda c: c["weighted"][0].update(method="guess"), "unknown method"),
+    (lambda c: c["weighted"][1].update(fields=["safety_plan"]), "needs integer or number"),
+])
+def test_criteria_an_admin_could_not_have_meant_are_refused(change, expected):
+    bad = copy.deepcopy(CRITERIA)
+    change(bad)
+    with pytest.raises(ValueError, match=expected):
+        validate_criteria(bad)
+
 def test_same_input_gives_same_ranking():
     cases = {"A": (good_extraction(), GOOD_TEXT),
              "B": (good_extraction(completion_weeks=fact(None, None, status="not_stated")), GOOD_TEXT)}
