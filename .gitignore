@@ -1,0 +1,14 @@
+# Secrets
+.env
+
+# The brief's sample proposals and anything quoting them must never be committed
+samples/
+extractions/
+prototype/audit/
+audit/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
