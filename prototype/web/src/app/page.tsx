@@ -36,14 +36,13 @@ export default function Home() {
         <div className="container-page relative grid items-center gap-12 py-20 lg:grid-cols-[1.1fr_1fr] lg:py-24">
           <div className="animate-fade-up">
             <span className="chip bg-white/10 text-brand-100 ring-1 ring-white/15">MATACS-TH-2026-02 · AI proposal triage</span>
-            <h1 className="mt-6 text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl lg:text-[3.4rem]">
-              AI reads the proposals.<br />
-              <span className="text-brand-300">Rules decide the score.</span><br />
-              A person makes the award.
+            <h1 className="mt-6 text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-[3.4rem]">
+              AI reads.<br />
+              <span className="text-brand-300">Rules decide.</span><br />
+              A person approves.
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-brand-100/90">
-              Contractor proposals in, a ranked list with a reason for every position out. The AI only
-              extracts facts with exact quotes; plain code checks them, applies the admin&apos;s criteria and ranks.
+            <p className="mt-6 max-w-md text-lg leading-relaxed text-brand-100/90">
+              Contractor proposals in, a ranked list with a reason for every position out.
             </p>
             <div className="mt-9 flex flex-wrap gap-3">
               <Link href="/console" className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-brand-900 transition hover:bg-brand-50">

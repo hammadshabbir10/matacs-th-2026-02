@@ -14,24 +14,24 @@ export function AuditPanel({ events, onDownloadRanking, onDownloadAudit }: {
 }) {
   return (
     <section className="card overflow-hidden" aria-label="Audit log">
-      <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4">
-        <div>
-          <p className="text-sm font-semibold text-stone-900">Audit log</p>
-          <p className="text-xs text-stone-500">Append-only record of how this result was produced</p>
-        </div>
+      <div className="border-b border-stone-100 px-5 py-4">
+        <p className="text-sm font-semibold text-stone-900">Audit log</p>
+        <p className="text-xs text-stone-500">Append-only record of how this result was produced</p>
       </div>
-      <ol className="max-h-80 space-y-2.5 overflow-y-auto px-5 py-4">
+      <ol className="max-h-56 space-y-2.5 overflow-y-auto px-5 py-4">
         {[...events].reverse().map((e, i) => (
-          <li key={i} className="flex gap-2.5 text-xs">
-            <span className="w-14 shrink-0 font-mono text-stone-400">{e.at.slice(11, 19)}</span>
-            <span className={`h-fit shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${ACTOR[e.actor]}`}>{e.actor}</span>
-            <span className="text-stone-700">{e.message}</span>
+          <li key={i} className="text-xs">
+            <div className="flex items-center gap-2">
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${ACTOR[e.actor]}`}>{e.actor}</span>
+              <span className="font-mono text-[11px] text-stone-400">{e.at.slice(11, 19)}</span>
+            </div>
+            <p className="mt-1 leading-relaxed text-stone-700">{e.message}</p>
           </li>
         ))}
       </ol>
-      <div className="flex flex-wrap gap-2 border-t border-stone-100 px-5 py-3">
-        <button type="button" className="btn-ghost px-3 py-1.5 text-xs" onClick={onDownloadRanking}>Download ranking.json</button>
-        <button type="button" className="btn-ghost px-3 py-1.5 text-xs" onClick={onDownloadAudit}>Download audit record</button>
+      <div className="grid grid-cols-2 gap-2 border-t border-stone-100 px-5 py-3">
+        <button type="button" className="btn-ghost px-2 py-1.5 text-xs" onClick={onDownloadRanking}>ranking.json ↓</button>
+        <button type="button" className="btn-ghost px-2 py-1.5 text-xs" onClick={onDownloadAudit}>Audit record ↓</button>
       </div>
     </section>
   );

@@ -8,7 +8,7 @@ import { AuditPanel } from "./AuditPanel";
 import { CriteriaPanel } from "./CriteriaPanel";
 import { LiveInput } from "./LiveInput";
 import { ResultCard } from "./ResultCard";
-import { CRITERION_COLOURS, now, type AuditEvent, type LiveDoc, type LiveResult, type Mode, type ReviewState } from "./types";
+import { now, type AuditEvent, type LiveDoc, type LiveResult, type Mode, type ReviewState } from "./types";
 
 const V1 = criteriaV1 as unknown as Criteria;
 const EMPTY_REVIEW: ReviewState = { overrides: [], cleared: {}, decision: null };
@@ -140,24 +140,46 @@ export function Console() {
 
       <div className={`mt-5 rounded-xl border px-4 py-3 text-sm ${mode === "saved" ? "border-brand-200 bg-brand-50/70 text-brand-900" : status?.live ? "border-violet-200 bg-violet-50 text-violet-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
         {mode === "saved"
-          ? <>Showing the brief&apos;s proposals A–E as read by <strong>{saved.source.model}</strong> on {saved.source.run_date}. Every quote was verified against the text at run time; the text itself is withheld, because the brief must not be redistributed. Scoring runs here, in your browser, from those facts.</>
+          ? <>Proposals A–E as read by <strong>{saved.source.model}</strong> on {saved.source.run_date}. Quotes were verified at run time and are withheld here.</>
           : status?.live
-            ? <>Live: each proposal is read on the server by <strong>{providers}</strong>. The AI only extracts facts with quotes; the checks and the scoring run here with the same rules.</>
-            : <>Live mode is off on this deployment (no AI key configured). The saved run still shows the full result.</>}
+            ? <>Live: proposals are read by <strong>{providers}</strong>; the checks and scoring run here.</>
+            : <>Live mode is off here (no AI key configured). The saved run still shows the full result.</>}
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[320px_1fr]">
-        <div className="flex flex-col gap-6">
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[340px_1fr]">
+        {/* criteria, decision and log sit beside the results, so neither column runs on alone */}
+        <aside className="flex flex-col gap-4">
           <CriteriaPanel applied={criteria} version={version} changed={version !== "v1"} onApply={applyCriteria}
             onReset={() => { setCriteria(V1); setVersion("v1"); log("admin", "Returned to criteria v1 (as published)."); }} />
-          <section className="card px-5 py-4" aria-label="Legend">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Points bar</p>
-            <ul className="mt-2 grid grid-cols-2 gap-1.5 text-xs text-stone-600">
-              {criteria.weighted.map((w) => <li key={w.id} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: CRITERION_COLOURS[w.id] }} />{w.label}</li>)}
-            </ul>
-            <div className="mt-3 flex flex-wrap gap-1.5"><span className="chip-ranked">ranked</span><span className="chip-flagged">flagged</span><span className="chip-ineligible">ineligible</span></div>
-          </section>
-        </div>
+
+          {result && (
+            <section className="card px-5 py-4" aria-label="Award decision">
+              <p className="text-sm font-semibold text-stone-900">Award decision</p>
+              <p className="text-xs text-stone-500">Made by a person. The tool only ranks.</p>
+              {review.decision ? (
+                <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-900">Recorded: award to <strong>{review.decision.proposal}</strong>{review.decision.note ? `: ${review.decision.note}` : ""} <span className="font-mono text-xs text-brand-700">({review.decision.at.slice(0, 16).replace("T", " ")} UTC)</span></p>
+              ) : (
+                <div className="mt-3 flex flex-col gap-2">
+                  <select className="input" value={decisionPick} onChange={(e) => setDecisionPick(e.target.value)} aria-label="Proposal to award">
+                    <option value="">Choose a ranked bid…</option>
+                    {ranked.map((r) => <option key={r.proposal} value={r.proposal}>{r.proposal} · rank #{r.rank}</option>)}
+                  </select>
+                  <input className="input" placeholder="Note for the record (optional)" value={decisionNote} onChange={(e) => setDecisionNote(e.target.value)} />
+                  <button type="button" className="btn-primary" disabled={!decisionPick} onClick={recordDecision}>Record decision</button>
+                </div>
+              )}
+            </section>
+          )}
+
+          <AuditPanel events={events}
+            onDownloadRanking={() => result && download("ranking.json", result.rows)}
+            onDownloadAudit={() => download("audit-record.json", {
+              criteria_version: version, criteria, prompt_version: saved.source.prompt_version, mode,
+              models: mode === "saved" ? saved.source.model : Object.fromEntries(Object.entries(live).map(([k, v]) => [k, v.extraction.model])),
+              result: result?.rows ?? [], scoring: result?.detail ?? {}, overrides: review.overrides, cleared_flags: review.cleared,
+              decision: review.decision, events,
+            })} />
+        </aside>
 
         <div className="flex min-w-0 flex-col gap-4">
           {mode === "live" && (
@@ -183,33 +205,8 @@ export function Console() {
                 );
               })}
 
-              <section className="card px-5 py-4" aria-label="Award decision">
-                <p className="text-sm font-semibold text-stone-900">Award decision</p>
-                <p className="text-xs text-stone-500">Made by a person. The tool ranks; it never awards.</p>
-                {review.decision ? (
-                  <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-900">Recorded: award to <strong>{review.decision.proposal}</strong>{review.decision.note ? `: ${review.decision.note}` : ""} <span className="font-mono text-xs text-brand-700">({review.decision.at.slice(0, 16).replace("T", " ")} UTC)</span></p>
-                ) : (
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <select className="input sm:w-44" value={decisionPick} onChange={(e) => setDecisionPick(e.target.value)} aria-label="Proposal to award">
-                      <option value="">Choose a ranked bid…</option>
-                      {ranked.map((r) => <option key={r.proposal} value={r.proposal}>{r.proposal} · rank #{r.rank}</option>)}
-                    </select>
-                    <input className="input" placeholder="Note for the record (optional)" value={decisionNote} onChange={(e) => setDecisionNote(e.target.value)} />
-                    <button type="button" className="btn-primary shrink-0" disabled={!decisionPick} onClick={recordDecision}>Record decision</button>
-                  </div>
-                )}
-              </section>
             </>
-          ) : mode === "live" ? null : null}
-
-          <AuditPanel events={events}
-            onDownloadRanking={() => result && download("ranking.json", result.rows)}
-            onDownloadAudit={() => download("audit-record.json", {
-              criteria_version: version, criteria, prompt_version: saved.source.prompt_version, mode,
-              models: mode === "saved" ? saved.source.model : Object.fromEntries(Object.entries(live).map(([k, v]) => [k, v.extraction.model])),
-              result: result?.rows ?? [], scoring: result?.detail ?? {}, overrides: review.overrides, cleared_flags: review.cleared,
-              decision: review.decision, events,
-            })} />
+          ) : null}
         </div>
       </div>
     </div>
