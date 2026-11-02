@@ -1,0 +1,37 @@
+[
+  {
+    "proposal": "A",
+    "rank": 1,
+    "status": "ranked",
+    "score": 98.5,
+    "reason": "#1 of 3, 98.5/100; strongest on relevant experience (14 installs), timeline (12 weeks), team and approach (4/4 elements)."
+  },
+  {
+    "proposal": "E",
+    "rank": 2,
+    "status": "ranked",
+    "score": 84.8,
+    "reason": "#2 of 3, 84.8/100; strongest on warranty (37 warranty years), team and approach (4/4 elements), price ($242,500); loses points on relevant experience (8 installs)."
+  },
+  {
+    "proposal": "D",
+    "rank": 3,
+    "status": "ranked",
+    "score": 70.3,
+    "reason": "#3 of 3, 70.3/100; strongest on price ($231,000); loses points on timeline (not stated), team and approach (2/4 elements); check: timeline not stated (0 points)."
+  },
+  {
+    "proposal": "B",
+    "rank": null,
+    "status": "ineligible",
+    "score": null,
+    "reason": "Not scored: fails mandatory 'Ontario electrical contractor licence held by the bidder'."
+  },
+  {
+    "proposal": "C",
+    "rank": null,
+    "status": "flagged",
+    "score": null,
+    "reason": "Held for human review: contains instructions addressed to automated reviewers; also check: relevant experience: the stated period starts in 2020, which is before the required 5-year window (2021 to present). Provisional score if cleared: 77.5/100."
+  }
+]

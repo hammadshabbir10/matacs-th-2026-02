@@ -15,10 +15,10 @@ for the Commercial Solar Installation criteria
 | Setting | Value | Why |
 |---|---|---|
 | Calls | One per proposal | Each bid is read on its own, so one bid can't influence another's facts |
-| Model | `claude-opus-5-5`, pinned | A model change is a new version, recorded in the audit log |
+| Model | `gemini-3.6-flash` (main), `openai/gpt-oss-120b` on Groq (fallback), `claude-opus-5-5` also supported; all pinned | The audit log records which model read each proposal. A model change is a new version. |
 | Output | Structured outputs, JSON schema below | The response always parses; no free text to interpret |
-| Effort | `medium` | Short documents and a narrow task |
-| Temperature | Not set | Current Claude models don't accept it. Repeatability comes from caching each extraction by (file hash, prompt version, model) and scoring in code. |
+| Retries | Temporary errors (429, 5xx) retried after 2, 4, 8 s, then the fallback provider, then a person | A provider outage never crashes a batch or gets guessed around |
+| Temperature | `0` with a fixed seed on Gemini and Groq; not set on Claude (it isn't accepted) | Reduces variation, but the real guarantee is saving each extraction by (file hash, prompt version, model) and scoring in code |
 | Prompt version | `extract-v1` | Stored with every result |
 
 The proposal text goes inside `<proposal_document>` tags and is treated as data. Rule 1 tells the model

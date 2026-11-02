@@ -18,8 +18,8 @@ import time
 from .prompt import PROMPT_VERSION, SYSTEM_PROMPT, build_output_schema, build_user_message
 
 CLAUDE_MODEL = "claude-opus-5-5"
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+GEMINI_MODEL = os.environ.get("TRIAGE_GEMINI_MODEL", "gemini-3.6-flash")
+GROQ_MODEL = os.environ.get("TRIAGE_GROQ_MODEL", "openai/gpt-oss-120b")
 MODELS = {"claude": CLAUDE_MODEL, "gemini": GEMINI_MODEL, "groq": GROQ_MODEL}
 
 # Phrases that address an automated reviewer rather than the client. Deliberately broad: a

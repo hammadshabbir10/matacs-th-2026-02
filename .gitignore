@@ -12,3 +12,11 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+
+# Next.js app
+prototype/web/node_modules/
+prototype/web/.next/
+prototype/web/.env*.local
+prototype/web/next-env.d.ts
+prototype/web/tsconfig.tsbuildinfo
+prototype/web/.vercel

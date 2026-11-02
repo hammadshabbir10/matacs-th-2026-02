@@ -92,5 +92,6 @@ Every ranking states which criteria version produced it.
 | Unequal comparisons | Price scope is recorded (only A says its price includes permits and connection) and shown to the reviewer. |
 | Poor scans | Low OCR confidence sends the proposal to review. |
 | Cost | One AI call per proposal, saved and reused; rescoring is free; very long files trigger an alert. |
+| Provider outage or model swap | Retries, then a second provider, then a person. In testing, the fallback model read B's licence as "not stated" instead of "held by a subcontractor", so B was flagged for a person rather than passed. |
 | Over-reliance on the tool | The tool ranks, a person awards; flags are resolved individually. |
 | Confidential bids | An API account that doesn't train on inputs; files and logs access-controlled. |
