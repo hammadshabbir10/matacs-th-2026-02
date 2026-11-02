@@ -31,8 +31,8 @@ against the document, the scan for planted instructions, the mandatory checks, t
 the tie-break, the ranking and the reason lines. These must be exact, repeatable, cheap and
 auditable: they enforce the admin's written policy literally, not by interpretation.
 
-The line: **AI answers "what does this document say?"; code answers "what does that mean for the
-score?"** Even the reasons are built from the scores, so a reason can never contradict its score.
+**The dividing line: AI answers "What does this document say?" and code answers "What does that
+mean for the score?"** Even the reasons are built from the scores, so a reason can never contradict its score.
 
 ## 2. Consistency and explainability
 
